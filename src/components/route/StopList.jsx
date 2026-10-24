@@ -1,27 +1,23 @@
-import { ArrowUpRight, Check, MoreHorizontal } from 'lucide-react';
-import { useReports } from '@/context/ReportsContext';
+import { Check, Loader2, Play, SkipForward, Weight } from 'lucide-react';
 
-export function StopList({ plan }) {
-  const { reports } = useReports();
+export function StopList({ plan, onUpdate, busyStop }) {
+  const stops = [...(plan?.collection_stops || [])].sort((a, b) => a.sequence - b.sequence);
+  const nextIndex = stops.findIndex((stop) => stop.worker_status === 'pending' || stop.worker_status === 'in_progress');
 
-  const stops = plan?.collection_stops?.length
-    ? [...plan.collection_stops]
-        .sort((a, b) => a.sequence - b.sequence)
-        .map((stop) => {
-          const linked = reports.find(
-            (report) =>
-              Number(report.location_id) === Number(stop.location_id)
-              || String(report.id) === String(stop.report_id),
-          );
-          return {
-            key: stop.id || stop.sequence,
-            location: linked?.location || `Stop ${stop.sequence}`,
-            issue: linked ? `${linked.priority} · ${linked.category}` : `Report ${stop.report_id}`,
-            eta: (stop.worker_status || 'pending').replaceAll('_', ' '),
-            state: stop.worker_status,
-          };
-        })
-    : [];
+  function complete(stop) {
+    const raw = window.prompt(
+      `Weight collected at ${stop.location_name || 'this stop'} in kg (leave blank if not measured):`,
+      '',
+    );
+    if (raw === null) return;
+    const trimmed = raw.trim();
+    const weight = trimmed === '' ? null : Number(trimmed);
+    if (trimmed !== '' && (!Number.isFinite(weight) || weight < 0)) {
+      window.alert('Enter a valid non-negative weight in kilograms.');
+      return;
+    }
+    onUpdate?.(stop, { worker_status: 'completed', weight_kg: weight });
+  }
 
   return (
     <section className="card stop-card">
@@ -30,9 +26,7 @@ export function StopList({ plan }) {
           <h2>Stop list</h2>
           <p>{stops.length ? `${stops.length} stops in plan` : 'Generate a route to see stops'}</p>
         </div>
-        <button type="button" className="icon-button" aria-label="Stop options">
-          <MoreHorizontal size={17} />
-        </button>
+        <span className="status-pill clear">{plan?.algorithm_version || 'waiting'}</span>
       </div>
       {!stops.length && (
         <div className="empty-state" style={{ padding: '18px 8px' }}>
@@ -40,23 +34,63 @@ export function StopList({ plan }) {
         </div>
       )}
       {stops.map((stop, index) => {
-        const numberClass = stop.state === 'completed' ? 'done' : index === 0 ? 'current' : '';
+        const state = stop.worker_status || 'pending';
+        const numberClass = state === 'completed' ? 'done' : index === nextIndex ? 'current' : '';
         return (
-          <div className={`stop-row ${index === 0 ? 'next' : ''}`} key={stop.key}>
+          <div className={`stop-row ${index === nextIndex ? 'next' : ''}`} key={stop.id || stop.sequence}>
             <div className={`stop-number ${numberClass}`}>
-              {stop.state === 'completed' ? <Check size={14} /> : index + 1}
+              {state === 'completed' ? <Check size={14} /> : index + 1}
             </div>
-            <div>
-              <b>{stop.location}</b>
-              <span>{stop.issue}</span>
+            <div className="stop-main">
+              <b>{stop.location_name || `Stop ${stop.sequence}`}</b>
+              <span>
+                {stop.report_code ? `${stop.report_code} · ` : ''}
+                {stop.priority} · {stop.category || stop.title}
+              </span>
+              <small>
+                {state.replaceAll('_', ' ')}
+                {stop.weight_kg != null ? ` · ${stop.weight_kg} kg logged` : ''}
+              </small>
             </div>
-            <small>{stop.eta}</small>
+            <div className="stop-actions">
+              {busyStop === String(stop.id) ? (
+                <Loader2 size={15} className="spin" />
+              ) : (
+                <>
+                  {state === 'pending' && (
+                    <button
+                      type="button"
+                      className="small-btn"
+                      title="Start this stop"
+                      onClick={() => onUpdate?.(stop, { worker_status: 'in_progress' })}
+                    >
+                      <Play size={13} /> Start
+                    </button>
+                  )}
+                  {state === 'in_progress' && (
+                    <button type="button" className="small-btn success" onClick={() => complete(stop)}>
+                      <Check size={13} /> Complete
+                    </button>
+                  )}
+                  {(state === 'pending' || state === 'in_progress') && (
+                    <button
+                      type="button"
+                      className="small-btn danger"
+                      title="Skip this stop"
+                      onClick={() => onUpdate?.(stop, { worker_status: 'skipped', note: 'Skipped by worker' })}
+                    >
+                      <SkipForward size={13} />
+                    </button>
+                  )}
+                  {state === 'completed' && stop.weight_kg == null && (
+                    <span className="weight-hint"><Weight size={12} /> no weight</span>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         );
       })}
-      <button type="button" className="secondary-btn full" disabled={!stops.length}>
-        View full stop list <ArrowUpRight size={15} />
-      </button>
     </section>
   );
 }

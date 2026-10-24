@@ -7,9 +7,12 @@ import { RoutePage } from '@/pages/RoutePage';
 import { ImpactPage } from '@/pages/ImpactPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { LocationsPage } from '@/pages/LocationsPage';
+import { DuplicatesPage } from '@/pages/DuplicatesPage';
+import { WorkflowsPage } from '@/pages/WorkflowsPage';
 import { AuthPage } from '@/pages/AuthPage';
 import { AuthProvider } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { RoleRoute } from '@/components/auth/RoleRoute';
 
 export default function App() {
   return (
@@ -23,10 +26,16 @@ export default function App() {
               <Route element={<AppShell />}>
                 <Route path="/" element={<OverviewPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/route" element={<RoutePage />} />
-                <Route path="/impact" element={<ImpactPage />} />
-                <Route path="/team" element={<TeamPage />} />
                 <Route path="/locations" element={<LocationsPage />} />
+                <Route element={<RoleRoute roles={['administrator', 'worker']} />}>
+                  <Route path="/route" element={<RoutePage />} />
+                  <Route path="/impact" element={<ImpactPage />} />
+                  <Route path="/duplicates" element={<DuplicatesPage />} />
+                  <Route path="/workflows" element={<WorkflowsPage />} />
+                </Route>
+                <Route element={<RoleRoute roles={['administrator']} />}>
+                  <Route path="/team" element={<TeamPage />} />
+                </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Route>
