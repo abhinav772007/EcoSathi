@@ -3,15 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "server": ".venv\\Scripts\\uvicorn server.main:app --reload --port 3001",
-    "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
-    "db:setup": ".venv\\Scripts\\python -m server.setup_db",
-    "db:seed": ".venv\\Scripts\\python -m server.seed",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
+ 
+"scripts": {
+  "dev": "vite",
+  "server": "python -m uvicorn server.main:app --reload --port 3001",
+  "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
+  "db:setup": "python -m server.setup_db",
+  "db:seed": "python -m server.seed",
+  "build": "vite build",
+  "preview": "vite preview"
+},
+
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",
     "lucide-react": "^0.468.0",

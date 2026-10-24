@@ -1,4 +1,4 @@
-import { Activity, Bell, GitMerge, Leaf, MapPin, Route, TrendingUp, Users } from 'lucide-react';
+import { Activity, Bell, BookOpen, GitMerge, Leaf, MapPin, Route, TrendingUp, Users } from 'lucide-react';
 
 export const NAV_SECTIONS = [
   {
@@ -15,8 +15,9 @@ export const NAV_SECTIONS = [
     items: [
       { id: 'duplicates', label: 'Duplicates', path: '/duplicates', icon: GitMerge, roles: ['administrator', 'worker'] },
       { id: 'workflows', label: 'Workflows', path: '/workflows', icon: Activity, roles: ['administrator', 'worker'] },
-      { id: 'team', label: 'Team', path: '/team', icon: Users, roles: ['administrator'] },
+      { id: 'team', label: 'Team & Roles', path: '/team', icon: Users, roles: ['administrator'] },
       { id: 'locations', label: 'Locations', path: '/locations', icon: MapPin },
+      { id: 'guidance', label: 'Disposal guide', path: '/guidance', icon: BookOpen },
     ],
   },
 ];

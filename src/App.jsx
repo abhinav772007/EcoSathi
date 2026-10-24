@@ -9,6 +9,7 @@ import { TeamPage } from '@/pages/TeamPage';
 import { LocationsPage } from '@/pages/LocationsPage';
 import { DuplicatesPage } from '@/pages/DuplicatesPage';
 import { WorkflowsPage } from '@/pages/WorkflowsPage';
+import { GuidancePage } from '@/pages/GuidancePage';
 import { AuthPage } from '@/pages/AuthPage';
 import { AuthProvider } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -27,6 +28,7 @@ export default function App() {
                 <Route path="/" element={<OverviewPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/locations" element={<LocationsPage />} />
+                <Route path="/guidance" element={<GuidancePage />} />
                 <Route element={<RoleRoute roles={['administrator', 'worker']} />}>
                   <Route path="/route" element={<RoutePage />} />
                   <Route path="/impact" element={<ImpactPage />} />

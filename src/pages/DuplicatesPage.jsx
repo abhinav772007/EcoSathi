@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, Check, GitMerge, Loader2, MapPin, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useReports } from '@/context/ReportsContext';
 import { PageHeading } from '@/components/ui/PageHeading';
-import { apiRequest } from '@/lib/api';
 
 function reportAge(value) {
   if (!value) return '';
@@ -15,130 +14,118 @@ function reportAge(value) {
 
 export function DuplicatesPage() {
   const { role } = useAuth();
-  const { refreshReports, notify } = useReports();
-  const [links, setLinks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { duplicateLinks, reviewDuplicate } = useReports();
   const [deciding, setDeciding] = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await apiRequest('/api/duplicates');
-      setLinks(data.filter((link) => !link.reviewed));
-      setError('');
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const pendingLinks = duplicateLinks.filter((link) => !link.reviewed);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function review(link, decision) {
+  async function handleReview(link, decision) {
     setDeciding(`${link.id}-${decision}`);
     try {
-      await apiRequest(`/api/duplicates/${link.id}/review`, {
-        method: 'POST',
-        body: JSON.stringify({ decision }),
-      });
-      setLinks((current) => current.filter((item) => item.id !== link.id));
-      await refreshReports();
-      notify(
-        decision === 'confirmed' ? 'Duplicate confirmed' : 'Reports kept separate',
-        `${link.report?.code || 'Report'} ${decision === 'confirmed' ? 'was linked to' : 'stays independent of'} ${link.canonical?.code || 'the canonical report'}.`,
-      );
-    } catch (requestError) {
-      setError(requestError.message);
+      await reviewDuplicate(link.id, decision);
     } finally {
       setDeciding(null);
     }
   }
 
-  const canReview = role === 'administrator';
-
   return (
     <div className="page">
       <PageHeading
-        eyebrow="Human review"
-        title="Duplicate reports"
-        description="Ambiguous matches are never merged silently. Confirm a duplicate or keep both reports actionable."
-        action={
-          <button type="button" className="secondary-btn" onClick={load} disabled={loading}>
-            <RefreshCw size={15} className={loading ? 'spin' : ''} /> Refresh
-          </button>
-        }
+        eyebrow="Consolidation engine"
+        title="Duplicate Review"
+        description="Review likely duplicate issues detected by spatio-temporal and category matching rules. Confirm to consolidate or dismiss to keep separate."
       />
 
-      {!canReview && (
-        <div className="demo-note">
-          <AlertTriangle size={17} />
-          <span>Only administrators can resolve duplicate matches. Workers can review the queue here.</span>
+      <div className="insight-banner">
+        <div className="insight-icon">
+          <GitMerge size={19} />
         </div>
-      )}
-      {error && <div className="demo-note error-note"><span>{error}</span></div>}
+        <div>
+          <b>
+            {pendingLinks.length} pending candidate {pendingLinks.length === 1 ? 'pair' : 'pairs'}
+          </b>
+          <span>
+            EcoSathi never auto-merges uncertain duplicates. Human administrators confirm before merging to preserve transparency.
+          </span>
+        </div>
+      </div>
 
-      {loading ? (
-        <div className="loading-state"><Loader2 size={18} className="spin" /> Loading duplicate queue...</div>
-      ) : !links.length ? (
-        <section className="card empty-state">
-          <GitMerge size={26} />
-          <h2>No duplicates waiting</h2>
-          <p>New reports are checked automatically against the same location and category within 24 hours.</p>
-        </section>
-      ) : (
-        <div className="duplicate-stack">
-          {links.map((link) => (
-            <section className="card duplicate-card" key={link.id}>
-              <div className="duplicate-heading">
-                <div>
-                  <b><GitMerge size={16} /> Possible duplicate</b>
-                  <span>{Math.round((link.confidence || 0) * 100)}% confidence · {link.match_reason}</span>
-                </div>
-                <span className="status-pill needs-review">needs review</span>
+      <div className="duplicate-stack" style={{ marginTop: '24px' }}>
+        {pendingLinks.map((link) => (
+          <section className="card duplicate-card" key={link.id}>
+            <div className="duplicate-heading">
+              <div>
+                <b>
+                  <AlertTriangle size={15} color="#e7975b" />
+                  Possible Duplicate Match ({Math.round(link.confidence * 100)}% confidence)
+                </b>
+                <span>{link.match_reason}</span>
               </div>
-              <div className="duplicate-pair">
-                <article>
-                  <em>NEW REPORT</em>
-                  <b>{link.report?.title || 'Unknown report'}</b>
-                  <span><MapPin size={13} /> {link.report?.location || 'Unknown'}</span>
-                  <small>{link.report?.code} · {link.report?.category} · {reportAge(link.report?.created_at)}</small>
-                </article>
-                <div className="duplicate-arrow">↔</div>
-                <article>
-                  <em>CANONICAL ISSUE</em>
-                  <b>{link.canonical?.title || 'Unknown report'}</b>
-                  <span><MapPin size={13} /> {link.canonical?.location || 'Unknown'}</span>
-                  <small>{link.canonical?.code} · {link.canonical?.category} · {reportAge(link.canonical?.created_at)}</small>
-                </article>
-              </div>
-              <div className="duplicate-actions">
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => review(link, 'dismissed')}
-                  disabled={!canReview || Boolean(deciding)}
-                >
-                  {deciding === `${link.id}-dismissed` ? <Loader2 size={15} className="spin" /> : <X size={15} />}
-                  Keep separate
-                </button>
-                <button
-                  type="button"
-                  className="primary-btn"
-                  onClick={() => review(link, 'confirmed')}
-                  disabled={!canReview || Boolean(deciding)}
-                >
-                  {deciding === `${link.id}-confirmed` ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
-                  Confirm duplicate
-                </button>
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
+              <span className="status-pill needs-review">Needs review</span>
+            </div>
+
+            <div className="duplicate-pair">
+              {/* Existing Canonical Report */}
+              <article>
+                <em>EXISTING CANONICAL ISSUE</em>
+                <b>{link.canonical?.title || 'Existing Report'}</b>
+                <span>
+                  <MapPin size={12} /> {link.canonical?.location}
+                </span>
+                <small>
+                  {link.canonical?.code || link.canonical?.id} · {reportAge(link.canonical?.created_at)} ·{' '}
+                  {link.canonical?.status}
+                </small>
+              </article>
+
+              <div className="duplicate-arrow">⟷</div>
+
+              {/* Incoming Duplicate Report */}
+              <article>
+                <em>INCOMING REPORT (CANDIDATE)</em>
+                <b>{link.report?.title || 'Incoming Report'}</b>
+                <span>
+                  <MapPin size={12} /> {link.report?.location}
+                </span>
+                <small>
+                  {link.report?.code || link.report?.id} · {reportAge(link.report?.created_at)} ·{' '}
+                  {link.report?.status}
+                </small>
+              </article>
+            </div>
+
+            <div className="duplicate-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => handleReview(link, 'dismissed')}
+                disabled={Boolean(deciding)}
+              >
+                {deciding === `${link.id}-dismissed` ? <Loader2 size={13} className="spin" /> : <X size={13} />}
+                Keep separate (Distinct issue)
+              </button>
+
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => handleReview(link, 'confirmed')}
+                disabled={Boolean(deciding)}
+              >
+                {deciding === `${link.id}-confirmed` ? <Loader2 size={13} className="spin" /> : <Check size={13} />}
+                Confirm duplicate (Merge)
+              </button>
+            </div>
+          </section>
+        ))}
+
+        {!pendingLinks.length && (
+          <div className="empty-state">
+            <Check size={28} color="var(--green)" style={{ margin: '0 auto 8px' }} />
+            <h2>All duplicate reviews cleared</h2>
+            <p>No unreviewed duplicate clusters found across active campus reports.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

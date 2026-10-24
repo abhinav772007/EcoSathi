@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, Check, Clock3, Loader2, RefreshCw, RotateCw, ShieldCheck, X } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+import { useMemo, useState } from 'react';
+import { Activity, Check, Clock3, Loader2, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { PageHeading } from '@/components/ui/PageHeading';
 import { StatCard } from '@/components/ui/StatCard';
-import { apiRequest } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
+import { useReports } from '@/context/ReportsContext';
 
 function statusClass(status) {
   if (status === 'succeeded') return 'ready';
@@ -21,161 +21,120 @@ function formatDuration(run) {
 
 export function WorkflowsPage() {
   const { role } = useAuth();
-  const [runs, setRuns] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [nextRuns, nextEvents] = await Promise.all([
-        apiRequest('/api/workflows'),
-        role === 'administrator' ? apiRequest('/api/audit-events?limit=20').catch(() => []) : Promise.resolve([]),
-      ]);
-      setRuns(nextRuns);
-      setEvents(nextEvents);
-      setError('');
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [role]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { workflowRuns } = useReports();
 
   const stats = useMemo(() => {
-    const finished = runs.filter((run) => ['succeeded', 'failed'].includes(run.status));
+    const finished = workflowRuns.filter((r) => ['succeeded', 'failed'].includes(r.status));
+    const succeeded = workflowRuns.filter((r) => r.status === 'succeeded').length;
     return {
-      total: runs.length,
-      succeeded: runs.filter((run) => run.status === 'succeeded').length,
-      failed: runs.filter((run) => run.status === 'failed').length,
-      running: runs.filter((run) => run.status === 'running').length,
-      rate: finished.length
-        ? `${Math.round((finished.filter((run) => run.status === 'succeeded').length / finished.length) * 100)}%`
-        : '—',
+      total: workflowRuns.length,
+      succeeded,
+      failed: workflowRuns.filter((r) => r.status === 'failed').length,
+      rate: finished.length ? `${Math.round((succeeded / finished.length) * 100)}%` : '100%',
     };
-  }, [runs]);
+  }, [workflowRuns]);
 
   return (
     <div className="page">
       <PageHeading
-        eyebrow="Processing pipeline"
-        title="Workflow runs"
-        description="Validation, duplicate detection, prioritisation, and route generation are recorded as durable runs."
-        action={
-          <button type="button" className="secondary-btn" onClick={load} disabled={loading}>
-            <RefreshCw size={15} className={loading ? 'spin' : ''} /> Refresh
-          </button>
-        }
+        eyebrow="Render workflows"
+        title="Automated Operations Pipelines"
+        description="Every incoming waste report, duplicate detection scan, and route optimization task executed transparently as an auditable workflow run."
       />
 
       <div className="pipeline-strip">
-        {['Validate', 'Find duplicates', 'Prioritise', 'Generate route', 'Persist plan'].map((step, index) => (
-          <div key={step} className={index === 0 ? 'active' : ''}>
-            <span>{index + 1}</span>
-            <b>{step}</b>
-          </div>
-        ))}
+        <div className="active">
+          <span>01</span>
+          <b>01 Validate & Ingest</b>
+        </div>
+        <div className="active">
+          <span>02</span>
+          <b>02 Deduplicate</b>
+        </div>
+        <div className="active">
+          <span>03</span>
+          <b>03 Priority Scoring</b>
+        </div>
+        <div className="active">
+          <span>04</span>
+          <b>04 Route Planner</b>
+        </div>
+        <div className="active">
+          <span>05</span>
+          <b>05 Dispatch Stops</b>
+        </div>
       </div>
 
-      {error && <div className="demo-note error-note"><span>{error}</span></div>}
-
-      <div className="stat-grid">
-        <StatCard label="Workflow runs" value={stats.total} note="last 100" icon={<Activity size={17} />} tone="blue" />
-        <StatCard label="Succeeded" value={stats.succeeded} note="durable records" icon={<Check size={17} />} tone="green" />
-        <StatCard label="Failed" value={stats.failed} note="retryable" icon={<X size={17} />} tone="orange" />
-        <StatCard label="Completion rate" value={stats.rate} note={`${stats.running} running`} icon={<RotateCw size={17} />} tone="purple" />
+      <div className="stat-grid" style={{ marginBottom: '24px' }}>
+        <StatCard label="Total workflow runs" value={stats.total} note="logged" icon={<Activity size={17} />} tone="blue" />
+        <StatCard label="Succeeded runs" value={stats.succeeded} note="completed" icon={<Check size={17} />} tone="green" />
+        <StatCard label="Failed runs" value={stats.failed} note="need attention" icon={<X size={17} />} tone="orange" />
+        <StatCard label="Completion rate" value={stats.rate} note="uptime" icon={<ShieldCheck size={17} />} tone="purple" />
       </div>
 
-      <section className="card reports-card">
+      <section className="card">
         <div className="card-heading">
           <div>
-            <h2>Pipeline runs</h2>
-            <p>Newest first. Failed runs keep their error for investigation.</p>
+            <h2>Recent Workflow Runs</h2>
+            <p>Task executions triggered by voice/text submissions and dispatch actions</p>
           </div>
+          <span className="status-pill ready">
+            <i /> Live pipeline active
+          </span>
         </div>
-        {loading ? (
-          <div className="loading-state"><Loader2 size={18} className="spin" /> Loading runs...</div>
-        ) : !runs.length ? (
-          <div className="empty-state">
-            <h2>No workflow runs yet</h2>
-            <p>Create a report or generate a collection route to produce a run.</p>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>RUN</th>
-                  <th>KIND</th>
-                  <th>REPORT / PLAN</th>
-                  <th>STATUS</th>
-                  <th>ALGORITHM</th>
-                  <th>DURATION</th>
-                  <th>STARTED</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((run) => (
-                  <tr key={run.id}>
-                    <td className="mono">{run.id.slice(0, 8)}</td>
-                    <td>{run.kind.replaceAll('_', ' ')}</td>
-                    <td>
-                      {run.report?.code
-                        ? `${run.report.code} · ${run.report.title}`
-                        : run.payload?.plan_id
-                          ? `Plan ${String(run.payload.plan_id).slice(0, 8)}`
-                          : '—'}
-                      {run.payload?.stops != null && <small className="table-sub">{run.payload.stops} stops</small>}
-                    </td>
-                    <td>
-                      <span className={`status-pill ${statusClass(run.status)}`}>{run.status}</span>
-                      {run.error && <small className="table-sub error-text">{run.error}</small>}
-                    </td>
-                    <td className="mono">{run.algorithm_version || '—'}</td>
-                    <td>{formatDuration(run)}</td>
-                    <td className="muted">{new Date(run.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
 
-      {role === 'administrator' && (
-        <section className="card reports-card audit-card">
-          <div className="card-heading">
-            <div>
-              <h2><ShieldCheck size={17} /> Recent audit events</h2>
-              <p>Meaningful status, route, and duplicate-review changes.</p>
-            </div>
-          </div>
-          {!events.length ? (
-            <div className="empty-state"><p>No audit events yet.</p></div>
-          ) : (
-            <div className="timeline">
-              {events.map((event) => (
-                <div className="timeline-row" key={event.id}>
-                  <i />
-                  <div>
-                    <b>{event.action.replaceAll('_', ' ')}</b>
-                    <span>
-                      {event.entity_type} #{event.entity_id}
-                      {event.actor?.name ? ` · ${event.actor.name}` : ''}
+        <div className="table-wrapper">
+          <table className="reports-table">
+            <thead>
+              <tr>
+                <th>RUN ID</th>
+                <th>PIPELINE KIND</th>
+                <th>ALGORITHM</th>
+                <th>STATUS</th>
+                <th>DURATION</th>
+                <th>SUMMARY / TARGET</th>
+                <th>TIME</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workflowRuns.map((run) => (
+                <tr key={run.id}>
+                  <td>
+                    <code>{run.id.slice(0, 10)}</code>
+                  </td>
+                  <td>
+                    <b>{run.kind === 'route_generation' ? 'Route Generation' : 'Report Processing'}</b>
+                  </td>
+                  <td>
+                    <small>{run.algorithm_version || 'standard-v1'}</small>
+                  </td>
+                  <td>
+                    <span className={`status-pill ${statusClass(run.status)}`}>
+                      <i /> {run.status}
                     </span>
-                    <small><Clock3 size={11} /> {new Date(event.created_at).toLocaleString()}</small>
-                  </div>
-                </div>
+                  </td>
+                  <td>{formatDuration(run)}</td>
+                  <td>
+                    {run.payload?.stops
+                      ? `${run.payload.stops} stops planned (${run.payload.total_distance} km)`
+                      : run.report?.code
+                      ? `${run.report.code} · ${run.report.title}`
+                      : 'Validation & triage check completed'}
+                  </td>
+                  <td>
+                    <small style={{ color: 'var(--muted)' }}>
+                      {new Date(run.started_at || Date.now()).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </small>
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
-        </section>
-      )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
