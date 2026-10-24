@@ -2,8 +2,10 @@ import { useLocation } from 'react-router-dom';
 import { Bell, Leaf, Menu, Search } from 'lucide-react';
 import { CURRENT_USER } from '@/data/campus';
 import { pageLabelFromPath } from '@/data/navigation';
+import { useAuth } from '@/context/AuthContext';
 
 export function Topbar({ onMenu }) {
+  const { signOut } = useAuth();
   const { pathname } = useLocation();
   const pageLabel = pageLabelFromPath(pathname);
 
@@ -31,7 +33,7 @@ export function Topbar({ onMenu }) {
           <Bell size={18} />
           <i />
         </button>
-        <div className="top-avatar">{CURRENT_USER.initials}</div>
+        <button type="button" className="top-avatar" onClick={signOut} title="Sign out">{CURRENT_USER.initials}</button>
       </div>
     </header>
   );
