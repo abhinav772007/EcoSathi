@@ -5,23 +5,37 @@ import { useAuth } from '@/context/AuthContext';
 import { useReports } from '@/context/ReportsContext';
 import { ActivityChart } from '@/components/overview/ActivityChart';
 import { RoutePreview } from '@/components/overview/RoutePreview';
+import { ReportDetailModal } from '@/components/reports/ReportDetailModal';
 import { ReportTable } from '@/components/reports/ReportTable';
 import { FilterMenu } from '@/components/ui/FilterMenu';
 import { PageHeading } from '@/components/ui/PageHeading';
 import { StatCard } from '@/components/ui/StatCard';
-import { useMemo, useState } from 'react';
+import { CHART_DATA } from '@/data/campus';
+import { apiRequest } from '@/lib/api';
+import { useEffect, useMemo, useState } from 'react';
 
 export function OverviewPage() {
-  const { displayName } = useAuth();
-  const { reports, resolveReport, setShowReportModal } = useReports();
+  const { displayName, role } = useAuth();
+  const { reports, resolveReport, updateReportStatus, setShowReportModal } = useReports();
   const [filter, setFilter] = useState('All reports');
+  const [summary, setSummary] = useState(null);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const canManage = role === 'administrator' || role === 'worker';
+
+  useEffect(() => {
+    if (!canManage) return;
+    apiRequest('/api/analytics/summary').then(setSummary).catch(() => setSummary(null));
+  }, [canManage]);
 
   const visibleReports = useMemo(
     () => (filter === 'All reports' ? reports : reports.filter((report) => report.status === filter)),
     [filter, reports],
   );
-  const resolvedCount = reports.filter((report) => report.status === 'Resolved').length;
+  const resolvedCount = summary?.resolved_reports ?? reports.filter((report) => report.status === 'Resolved').length;
+  const openCount = summary?.open_reports ?? openReportCount(reports);
+  const pendingDuplicates = summary?.pending_duplicates ?? reports.filter((report) => report.status === 'Needs review').length;
   const firstName = displayName.split(' ')[0] || 'there';
+  const chartData = summary?.last_7_days?.length ? summary.last_7_days : CHART_DATA;
 
   return (
     <div className="page">
@@ -41,23 +55,25 @@ export function OverviewPage() {
           <Sparkles size={19} />
         </div>
         <div>
-          <b>{openReportCount(reports)} open reports in the queue</b>
-          <span>Review, verify, and generate a collection route from the Route page.</span>
+          <b>{openCount} open reports in the queue</b>
+          <span>
+            {pendingDuplicates} possible duplicate{pendingDuplicates === 1 ? '' : 's'} need review. Process reports and generate a route from the Route page.
+          </span>
         </div>
-        <Link to="/impact">
-          View insights <ArrowUpRight size={15} />
+        <Link to={canManage ? '/route' : '/reports'}>
+          {canManage ? 'Plan route' : 'Open reports'} <ArrowUpRight size={15} />
         </Link>
       </div>
 
       <div className="stat-grid">
-        <StatCard label="Open reports" value={openReportCount(reports)} change="" note="active" icon={<Bell size={17} />} tone="orange" />
-        <StatCard label="Resolved" value={resolvedCount} change="" note="all loaded" icon={<Check size={17} />} tone="green" />
-        <StatCard label="Total reports" value={reports.length} change="" note="your view" icon={<Clock3 size={17} />} tone="blue" />
+        <StatCard label="Open reports" value={openCount} change="" note="active" icon={<Bell size={17} />} tone="orange" />
+        <StatCard label="Resolved" value={resolvedCount} change="" note="all time" icon={<Check size={17} />} tone="green" />
+        <StatCard label="Total reports" value={summary?.total_reports ?? reports.length} change="" note="visible to you" icon={<Clock3 size={17} />} tone="blue" />
         <StatCard label="Locations in use" value={new Set(reports.map((report) => report.location)).size} change="" note="from reports" icon={<Leaf size={17} />} tone="purple" />
       </div>
 
       <div className="content-grid">
-        <ActivityChart />
+        <ActivityChart data={chartData} demo={!summary} />
         <RoutePreview />
       </div>
 
@@ -74,8 +90,21 @@ export function OverviewPage() {
             </Link>
           </div>
         </div>
-        <ReportTable reports={visibleReports.slice(0, 4)} onResolve={resolveReport} />
+        <ReportTable
+          reports={visibleReports.slice(0, 4)}
+          onResolve={resolveReport}
+          onOpen={setSelectedReport}
+          canManage={canManage}
+        />
       </section>
+
+      {selectedReport && (
+        <ReportDetailModal
+          report={selectedReport}
+          onClose={() => setSelectedReport(null)}
+          onStatusChange={updateReportStatus}
+        />
+      )}
     </div>
   );
 }

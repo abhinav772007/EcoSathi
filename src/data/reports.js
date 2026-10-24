@@ -71,10 +71,27 @@ export function nextReportId(reports) {
   return `ECO-${max + 1}`;
 }
 
+export const STATUS_TRANSITIONS = {
+  Submitted: ['Needs review', 'Verified', 'Rejected'],
+  'Needs review': ['Verified', 'Rejected'],
+  Verified: ['Assigned', 'In Progress', 'Resolved', 'Rejected'],
+  Assigned: ['In Progress', 'Resolved', 'Verified', 'Rejected'],
+  'In Progress': ['Resolved', 'Rejected'],
+  Resolved: ['Verified'],
+  Rejected: ['Needs review', 'Verified'],
+};
+
+export function allowedStatuses(status, role) {
+  if (role === 'resident') return [];
+  const options = STATUS_TRANSITIONS[status] || [];
+  if (role === 'worker') return options.filter((item) => ['In Progress', 'Resolved'].includes(item));
+  return options;
+}
+
 export function statusClassName(status) {
   return status.toLowerCase().replaceAll(' ', '-');
 }
 
 export function openReportCount(reports) {
-  return reports.filter((report) => report.status !== 'Resolved').length;
+  return reports.filter((report) => report.status !== 'Resolved' && report.status !== 'Rejected').length;
 }

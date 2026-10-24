@@ -12,15 +12,21 @@ function errorMessage(body) {
   return 'Request failed';
 }
 
-export async function apiRequest(path, options = {}) {
+async function authHeaders(extra = {}) {
   const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+  return {
+    ...(data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {}),
+    ...extra,
+  };
+}
+
+export async function apiRequest(path, options = {}) {
   const response = await fetch(`${apiUrl}${path}`, {
     ...options,
-    headers: {
+    headers: await authHeaders({
       'Content-Type': 'application/json',
-      ...(data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {}),
       ...options.headers,
-    },
+    }),
   });
   const contentType = response.headers.get('content-type') || '';
   const body = contentType.includes('application/json')
@@ -29,3 +35,17 @@ export async function apiRequest(path, options = {}) {
   if (!response.ok) throw new Error(errorMessage(body));
   return body;
 }
+
+export async function apiBlob(path, options = {}) {
+  const response = await fetch(`${apiUrl}${path}`, {
+    ...options,
+    headers: await authHeaders(options.headers),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(errorMessage(body));
+  }
+  return response.blob();
+}
+
+export { apiUrl };

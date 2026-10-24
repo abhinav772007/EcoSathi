@@ -32,15 +32,24 @@ def get_or_create_demo_user(client: Client) -> str:
 def build_reports(user_id: str) -> list[dict]:
     now = datetime.now(timezone.utc)
     reports = [
-        ("ECO-2001", "Overflowing bin near hostel mess", "R. K. Hall · North gate", "Overflowing bin", "Urgent", "Needs review", "Bin has been full since the morning collection round.", 12),
-        ("ECO-2002", "Mixed waste around the amphitheatre", "Main amphitheatre", "Scattered waste", "High", "Verified", "Plastic and food waste need to be separated.", 38),
-        ("ECO-2003", "Missed pickup from science block", "Science block · Dock 2", "Missed pickup", "Medium", "Assigned", "The scheduled collection did not arrive at Dock 2.", 75),
-        ("ECO-2004", "Where can I dispose of e-waste?", "Rajendra Bhawan", "Disposal question", "Low", "Resolved", "Resident requested the nearest e-waste drop-off point.", 130),
-        ("ECO-2005", "Broken recycling label", "Central library", "Disposal question", "Medium", "Needs review", "The recycling instructions are no longer readable.", 185),
-        ("ECO-2006", "Hostel mess bin still overflowing", "R. K. Hall · North gate", "Overflowing bin", "High", "Needs review", "Follow-up report for the same full bin; retained for duplicate review.", 16),
+        ("ECO-2001", "Overflowing bin near hostel mess", "R. K. Hall · North gate", "Overflowing bin", "Urgent", "Needs review", "Bin has been full since the morning collection round.", 12, None),
+        ("ECO-2002", "Mixed waste around the amphitheatre", "Main amphitheatre", "Scattered waste", "High", "Verified", "Plastic and food waste need to be separated.", 38, None),
+        ("ECO-2003", "Missed pickup from science block", "Science block · Dock 2", "Missed pickup", "Medium", "Verified", "The scheduled collection did not arrive at Dock 2.", 75, None),
+        ("ECO-2004", "Where can I dispose of e-waste?", "Rajendra Bhawan", "Disposal question", "Low", "Resolved", "Resident requested the nearest e-waste drop-off point.", 130, 55),
+        ("ECO-2005", "Broken recycling label", "Central library", "Disposal question", "Medium", "Verified", "The recycling instructions are no longer readable.", 185, None),
+        ("ECO-2006", "Hostel mess bin still overflowing", "R. K. Hall · North gate", "Overflowing bin", "High", "Needs review", "Follow-up report for the same full bin; retained for duplicate review.", 16, None),
+        ("ECO-2007", "Litter around the library steps", "Central library", "Scattered waste", "High", "Verified", "Paper cups and wrappers are collected near the entrance.", 52, None),
+        ("ECO-2008", "Bin outside hospital gate is full", "Institute hospital", "Overflowing bin", "Urgent", "Resolved", "Bin was overflowing beside the outpatient gate.", 240, 70),
+        ("ECO-2009", "Where should disposable masks go?", "Sports complex", "Disposal question", "Low", "Verified", "Resident asked which stream is used for used masks.", 8, None),
+        ("ECO-2010", "Lecture hall waste not collected", "Lecture Hall Complex", "Missed pickup", "Medium", "Verified", "The afternoon pickup was missed after a large event.", 96, None),
+        ("ECO-2011", "Recycling bin full at Rajendra Bhawan", "Rajendra Bhawan", "Overflowing bin", "High", "Verified", "The recyclable stream bin needs an extra pickup.", 64, None),
+        ("ECO-2012", "Waste scattered near sports complex", "Sports complex", "Scattered waste", "High", "Verified", "Bottles and food wrappers are spread across the path.", 110, None),
+        ("ECO-2013", "Missed pickup outside hospital", "Institute hospital", "Missed pickup", "Medium", "Verified", "The scheduled afternoon pickup did not arrive.", 30, None),
     ]
-    return [
-        {
+    rows = []
+    for code, title, location, category, priority, status, description, age, resolved_after in reports:
+        created_at = now - timedelta(minutes=age)
+        row = {
             "code": code,
             "user_id": user_id,
             "title": title,
@@ -49,10 +58,13 @@ def build_reports(user_id: str) -> list[dict]:
             "priority": priority,
             "status": status,
             "description": description,
-            "created_at": (now - timedelta(minutes=age)).isoformat(),
+            "created_at": created_at.isoformat(),
+            "updated_at": created_at.isoformat(),
         }
-        for code, title, location, category, priority, status, description, age in reports
-    ]
+        if resolved_after is not None:
+            row["resolved_at"] = (created_at + timedelta(minutes=resolved_after)).isoformat()
+        rows.append(row)
+    return rows
 
 
 def main() -> None:

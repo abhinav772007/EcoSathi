@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ArrowUpRight, ChevronDown, CircleHelp, Leaf, LogOut, MoreHorizontal } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, CircleHelp, Leaf, LogOut } from 'lucide-react';
 import { WORKSPACE } from '@/data/campus';
-import { NAV_SECTIONS } from '@/data/navigation';
+import { canAccess, NAV_SECTIONS } from '@/data/navigation';
 import { openReportCount } from '@/data/reports';
 import { useAuth } from '@/context/AuthContext';
 import { useReports } from '@/context/ReportsContext';
@@ -42,29 +42,33 @@ export function Sidebar({ open, onNavigate }) {
       </div>
 
       <nav>
-        {NAV_SECTIONS.map((section, index) => (
-          <div key={section.label}>
-            <p className={`nav-label ${index > 0 ? 'nav-gap' : ''}`}>{section.label}</p>
-            {section.items.map((item) => {
-              const NavIcon = item.icon;
-              return (
-                <NavLink
-                  key={item.id}
-                  to={item.path}
-                  end={item.path === '/'}
-                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                  onClick={onNavigate}
-                >
-                  <Icon>
-                    <NavIcon size={17} />
-                  </Icon>
-                  {item.label}
-                  {item.badgeKey && <span className="nav-count">{badges[item.badgeKey]}</span>}
-                </NavLink>
-              );
-            })}
-          </div>
-        ))}
+        {NAV_SECTIONS.map((section, index) => {
+          const visibleItems = section.items.filter((item) => canAccess(item, role));
+          if (!visibleItems.length) return null;
+          return (
+            <div key={section.label}>
+              <p className={`nav-label ${index > 0 ? 'nav-gap' : ''}`}>{section.label}</p>
+              {visibleItems.map((item) => {
+                const NavIcon = item.icon;
+                return (
+                  <NavLink
+                    key={item.id}
+                    to={item.path}
+                    end={item.path === '/'}
+                    className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                    onClick={onNavigate}
+                  >
+                    <Icon>
+                      <NavIcon size={17} />
+                    </Icon>
+                    {item.label}
+                    {item.badgeKey && <span className="nav-count">{badges[item.badgeKey]}</span>}
+                  </NavLink>
+                );
+              })}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="sidebar-bottom">

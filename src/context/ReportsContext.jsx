@@ -12,63 +12,121 @@ export function ReportsProvider({ children }) {
   const [toast, setToast] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
 
+  const notify = useCallback((title, detail, timeout = 3500) => {
+    setToast({ title, detail });
+    window.setTimeout(() => setToast(null), timeout);
+  }, []);
+
+  const loadReports = useCallback(async () => {
+    const nextReports = await apiRequest('/api/reports');
+    setReports(nextReports);
+    return nextReports;
+  }, []);
+
+  const loadLocations = useCallback(async () => {
+    const nextLocations = await apiRequest('/api/locations');
+    setLocations(nextLocations);
+    return nextLocations;
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    Promise.all([apiRequest('/api/reports'), apiRequest('/api/locations')])
-      .then(([nextReports, nextLocations]) => {
-        setReports(nextReports);
-        setLocations(nextLocations);
-      })
+    Promise.all([loadReports(), loadLocations()])
       .catch((error) => {
         setReports([]);
-        setToast({ title: 'Could not load reports', detail: error.message });
+        notify('Could not load reports', error.message);
       })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [loadLocations, loadReports, notify, user]);
 
   const dismissToast = useCallback(() => setToast(null), []);
+
+  const refreshReports = useCallback(async () => {
+    try {
+      return await loadReports();
+    } catch (error) {
+      notify('Could not refresh reports', error.message);
+      return null;
+    }
+  }, [loadReports, notify]);
+
+  const refreshLocations = useCallback(async () => {
+    try {
+      return await loadLocations();
+    } catch (error) {
+      notify('Could not refresh locations', error.message);
+      return null;
+    }
+  }, [loadLocations, notify]);
 
   const addReport = useCallback(async (report) => {
     try {
       const created = await apiRequest('/api/reports', {
         method: 'POST',
-        body: JSON.stringify({ ...report, confirmed: true, source: 'text' }),
+        body: JSON.stringify({ ...report, source: report.source || 'text', confirmed: true }),
       });
       setReports((current) => [created, ...current]);
-      setShowReportModal(false);
-      setToast({ title: 'Report submitted', detail: `EcoSathi is processing ${created.id}` });
-      window.setTimeout(() => setToast(null), 3500);
+      notify('Report submitted', `EcoSathi is processing ${created.id}`);
+      return created;
     } catch (error) {
-      setToast({ title: 'Report was not submitted', detail: error.message });
+      notify('Report was not submitted', error.message, 5000);
+      return null;
     }
-  }, []);
+  }, [notify]);
+
+  const updateReportStatus = useCallback(async (id, status, note) => {
+    try {
+      const updated = await apiRequest(`/api/reports/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, note: note || null }),
+      });
+      setReports((current) => current.map((report) => (report.id === id ? updated : report)));
+      notify('Report updated', `${id} is now ${updated.status}`);
+      return updated;
+    } catch (error) {
+      notify('Could not update report', error.message, 4500);
+      return null;
+    }
+  }, [notify]);
 
   const resolveReport = useCallback(async (id) => {
-    try {
-      const resolved = await apiRequest(`/api/reports/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'Resolved' }),
-      });
-      setReports((current) => current.map((report) => (report.id === id ? resolved : report)));
-      setToast({ title: 'Report resolved', detail: `${id} marked as resolved` });
-      window.setTimeout(() => setToast(null), 2500);
-    } catch (error) {
-      setToast({ title: 'Could not resolve report', detail: error.message });
-    }
-  }, []);
+    const updated = await updateReportStatus(id, 'Resolved', null);
+    if (updated) notify('Report resolved', `${id} marked as resolved`, 2500);
+    return updated;
+  }, [notify, updateReportStatus]);
 
   const value = useMemo(
     () => ({
-      reports, locations, loading,
+      reports,
+      locations,
+      loading,
       toast,
       showReportModal,
       setShowReportModal,
       addReport,
+      updateReportStatus,
       resolveReport,
+      refreshReports,
+      refreshLocations,
       dismissToast,
+      notify,
     }),
-    [addReport, dismissToast, locations, reports, resolveReport, showReportModal, toast, loading],
+    [
+      addReport,
+      dismissToast,
+      loading,
+      locations,
+      notify,
+      refreshLocations,
+      refreshReports,
+      reports,
+      resolveReport,
+      setShowReportModal,
+      showReportModal,
+      toast,
+      updateReportStatus,
+    ],
   );
 
   return <ReportsContext.Provider value={value}>{children}</ReportsContext.Provider>;

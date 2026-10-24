@@ -35,6 +35,7 @@ create table if not exists public.reports (
   source text not null default 'text' check (source in ('text', 'voice', 'webhook')),
   confirmed boolean not null default false,
   idempotency_key text unique,
+  resolution_note text,
   resolved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -58,6 +59,7 @@ create table if not exists public.workflow_runs (
   status text not null default 'queued' check (status in ('queued', 'running', 'succeeded', 'failed')),
   error text,
   algorithm_version text,
+  payload jsonb not null default '{}'::jsonb,
   started_at timestamptz,
   completed_at timestamptz,
   created_at timestamptz not null default now()
@@ -66,9 +68,13 @@ create table if not exists public.workflow_runs (
 create table if not exists public.collection_plans (
   id uuid primary key default gen_random_uuid(),
   status text not null default 'proposed' check (status in ('proposed', 'active', 'completed', 'cancelled')),
-  algorithm_version text not null default 'nearest-neighbor-v1',
+  algorithm_version text not null default 'priority-nearest-neighbor-v2',
   total_distance double precision not null default 0,
   baseline_distance double precision not null default 0,
+  stop_count integer not null default 0,
+  objective_value double precision,
+  depot_lat double precision,
+  depot_lng double precision,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
@@ -80,6 +86,9 @@ create table if not exists public.collection_stops (
   location_id bigint references public.locations(id),
   sequence integer not null,
   worker_status text not null default 'pending' check (worker_status in ('pending', 'in_progress', 'completed', 'skipped')),
+  weight_kg double precision check (weight_kg is null or weight_kg >= 0),
+  notes text,
+  started_at timestamptz,
   completed_at timestamptz,
   unique (plan_id, sequence)
 );
@@ -93,6 +102,17 @@ create table if not exists public.audit_events (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+-- Safe migrations for projects created with an earlier version of this schema.
+alter table public.reports add column if not exists resolution_note text;
+alter table public.workflow_runs add column if not exists payload jsonb not null default '{}'::jsonb;
+alter table public.collection_plans add column if not exists stop_count integer not null default 0;
+alter table public.collection_plans add column if not exists objective_value double precision;
+alter table public.collection_plans add column if not exists depot_lat double precision;
+alter table public.collection_plans add column if not exists depot_lng double precision;
+alter table public.collection_stops add column if not exists weight_kg double precision;
+alter table public.collection_stops add column if not exists notes text;
+alter table public.collection_stops add column if not exists started_at timestamptz;
 
 alter table public.profiles enable row level security;
 alter table public.locations enable row level security;
@@ -115,6 +135,8 @@ create policy "Authenticated users can read reports" on public.reports for selec
 create policy "Authenticated users can create reports" on public.reports for insert to authenticated with check (auth.uid() = user_id);
 create policy "Authenticated users can update reports" on public.reports for update to authenticated using (auth.uid() = user_id);
 create policy "Authenticated users can read locations" on public.locations for select to authenticated using (true);
+drop policy if exists "Authenticated users can read bins" on public.bins;
+create policy "Authenticated users can read bins" on public.bins for select to authenticated using (true);
 drop policy if exists "Users can read own profile" on public.profiles;
 drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can read own profile" on public.profiles for select to authenticated using (auth.uid() = id);
@@ -122,7 +144,10 @@ create policy "Users can update own profile" on public.profiles for update to au
 
 create index if not exists reports_user_created_idx on public.reports(user_id, created_at desc);
 create index if not exists reports_status_idx on public.reports(status);
+create index if not exists reports_location_created_idx on public.reports(location_id, created_at desc);
 create index if not exists audit_entity_idx on public.audit_events(entity_type, entity_id);
+create index if not exists workflow_created_idx on public.workflow_runs(created_at desc);
+create index if not exists collection_stops_plan_idx on public.collection_stops(plan_id, sequence);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -152,5 +177,17 @@ insert into public.locations (name, latitude, longitude, location_type) values
   ('Main amphitheatre', 29.8644, 77.8968, 'campus'),
   ('Science block · Dock 2', 29.8660, 77.8982, 'academic'),
   ('Rajendra Bhawan', 29.8636, 77.8948, 'hostel'),
-  ('Central library', 29.8649, 77.8977, 'academic')
+  ('Central library', 29.8649, 77.8977, 'academic'),
+  ('Lecture Hall Complex', 29.8667, 77.8972, 'academic'),
+  ('Institute hospital', 29.8629, 77.8985, 'campus'),
+  ('Sports complex', 29.8675, 77.8942, 'campus')
 on conflict (name) do nothing;
+
+insert into public.bins (location_id, waste_type, capacity)
+select location.id, stream.waste_type, stream.capacity
+from public.locations location
+cross join (values ('mixed', 120), ('recyclable', 80)) as stream(waste_type, capacity)
+where not exists (
+  select 1 from public.bins existing
+  where existing.location_id = location.id and existing.waste_type = stream.waste_type
+);
