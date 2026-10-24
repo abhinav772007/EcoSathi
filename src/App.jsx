@@ -7,13 +7,20 @@ import { RoutePage } from '@/pages/RoutePage';
 import { ImpactPage } from '@/pages/ImpactPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { LocationsPage } from '@/pages/LocationsPage';
+import { AuthPage } from '@/pages/AuthPage';
+import { AuthProvider } from '@/context/AuthContext';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 export default function App() {
   return (
     <BrowserRouter>
-      <ReportsProvider>
+      <AuthProvider>
+        <ReportsProvider>
         <Routes>
-          <Route element={<AppShell />}>
+          <Route path="/login" element={<AuthPage />} />
+          <Route path="/signup" element={<AuthPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AppShell />}>
             <Route path="/" element={<OverviewPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/route" element={<RoutePage />} />
@@ -21,9 +28,11 @@ export default function App() {
             <Route path="/team" element={<TeamPage />} />
             <Route path="/locations" element={<LocationsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
           </Route>
         </Routes>
-      </ReportsProvider>
+        </ReportsProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
