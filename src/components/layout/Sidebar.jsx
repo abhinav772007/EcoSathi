@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ArrowUpRight, ChevronDown, CircleHelp, Leaf, LogOut } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, CircleHelp, Leaf, LogOut, ShieldCheck, Truck, User } from 'lucide-react';
 import { WORKSPACE } from '@/data/campus';
 import { canAccess, NAV_SECTIONS } from '@/data/navigation';
 import { openReportCount } from '@/data/reports';
@@ -8,11 +8,10 @@ import { useReports } from '@/context/ReportsContext';
 import { Icon } from '@/components/ui/Icon';
 
 export function Sidebar({ open, onNavigate }) {
-  const { displayName, role, initials, signOut } = useAuth();
+  const { displayName, role, roleMeta, initials, signOut } = useAuth();
   const { reports } = useReports();
   const navigate = useNavigate();
   const badges = { openReports: openReportCount(reports) };
-  const roleLabel = role === 'administrator' ? 'Administrator' : role === 'worker' ? 'Collection worker' : 'Resident';
 
   async function handleSignOut() {
     if (window.confirm('Sign out of EcoSathi?')) {
@@ -20,6 +19,9 @@ export function Sidebar({ open, onNavigate }) {
       navigate('/login', { replace: true });
     }
   }
+
+  const RoleIcon =
+    role === 'administrator' ? ShieldCheck : role === 'worker' ? Truck : User;
 
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
@@ -38,7 +40,7 @@ export function Sidebar({ open, onNavigate }) {
           <b>{WORKSPACE.name}</b>
           <small>{WORKSPACE.unit}</small>
         </div>
-        <ChevronDown size={15} />
+        <div className={`role-badge-pill ${role}`}>{roleMeta.label}</div>
       </div>
 
       <nav>
@@ -72,19 +74,22 @@ export function Sidebar({ open, onNavigate }) {
       </nav>
 
       <div className="sidebar-bottom">
-        <div className="help-card">
+        <NavLink to="/guidance" className="help-card" onClick={onNavigate}>
           <CircleHelp size={18} />
           <div>
-            <b>Need a hand?</b>
-            <small>Read the operations guide</small>
+            <b>Campus Disposal Guide</b>
+            <small>Segregation rules & streams</small>
           </div>
           <ArrowUpRight size={15} />
-        </div>
+        </NavLink>
+
         <div className="profile">
           <div className="profile-avatar">{initials}</div>
           <div>
             <b>{displayName}</b>
-            <small>{roleLabel}</small>
+            <small style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <RoleIcon size={11} /> {roleMeta.label}
+            </small>
           </div>
           <button
             type="button"
@@ -101,5 +106,3 @@ export function Sidebar({ open, onNavigate }) {
     </aside>
   );
 }
-
-

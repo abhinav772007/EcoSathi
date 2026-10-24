@@ -123,6 +123,11 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=120)
+    role: str = Field(default="resident", pattern="^(resident|worker|administrator)$")
+
+
+class RoleUpdate(BaseModel):
+    role: str = Field(pattern="^(resident|worker|administrator)$")
 
 
 class LoginRequest(BaseModel):
@@ -343,13 +348,14 @@ def register(payload: RegisterRequest) -> dict:
     client.table("profiles").upsert({
         "id": str(user.id),
         "name": name,
-        "role": "resident",
+        "role": payload.role or "resident",
     }).execute()
     return {
         "ok": True,
         "message": "Account created successfully. You can sign in now.",
         "email": email,
         "name": name,
+        "role": payload.role or "resident",
     }
 
 
@@ -375,6 +381,72 @@ async def login(payload: LoginRequest) -> dict:
 @app.get("/api/me")
 def me(user: dict = Depends(current_user)) -> dict:
     return user
+
+
+@app.patch("/api/me/role")
+def update_my_role(payload: RoleUpdate, user: dict = Depends(current_user)) -> dict:
+    client = configured()
+    client.table("profiles").update({"role": payload.role}).eq("id", user["id"]).execute()
+    write_audit(client, user["id"], "user", user["id"], "role_switched", {"role": payload.role})
+    return {"id": user["id"], "name": user["name"], "role": payload.role}
+
+
+@app.get("/api/users")
+def list_users(user: dict = Depends(current_user)) -> list[dict]:
+    require_role(user, "administrator")
+    client = configured()
+    return client.table("profiles").select("*").order("created_at", desc=False).execute().data
+
+
+@app.patch("/api/users/{user_id}/role")
+def update_user_role(user_id: str, payload: RoleUpdate, user: dict = Depends(current_user)) -> dict:
+    require_role(user, "administrator")
+    client = configured()
+    updated = client.table("profiles").update({"role": payload.role}).eq("id", user_id).select("*").single().execute()
+    write_audit(client, user["id"], "user", user_id, "role_updated", {"new_role": payload.role})
+    return updated.data
+
+
+@app.get("/api/guidance")
+def get_guidance() -> list[dict]:
+    return [
+        {
+            "id": "organic",
+            "stream": "Organic & Wet Waste",
+            "bin_type": "Green Bin",
+            "badge": "Compostable",
+            "accepted": ["Leftover food", "Fruit & vegetable peels", "Garden trimmings"],
+            "forbidden": ["Plastic bags", "Styrofoam", "Cutlery"],
+            "locations": ["Hostel Mess backyards", "Cafeteria dock"],
+        },
+        {
+            "id": "recyclable",
+            "stream": "Dry Recyclables",
+            "bin_type": "Blue Bin",
+            "badge": "Recyclable",
+            "accepted": ["Plastic bottles", "Clean paper & cardboard", "Metal cans"],
+            "forbidden": ["Food-soiled paper", "Used tissues"],
+            "locations": ["Lecture Hall corridors", "Central Library courtyard"],
+        },
+        {
+            "id": "ewaste",
+            "stream": "Electronic Waste",
+            "bin_type": "Orange Bin / Drop-off",
+            "badge": "Special Collection",
+            "accepted": ["Batteries", "Broken chargers & cables", "Keyboards & components"],
+            "forbidden": ["Fluorescent tube lights with mercury"],
+            "locations": ["Computer Centre lobby", "Electrical Engineering dept"],
+        },
+        {
+            "id": "hazardous",
+            "stream": "Hazardous & Biomedical Waste",
+            "bin_type": "Yellow / Red Special Bin",
+            "badge": "Escalation Required",
+            "accepted": ["Lab chemical residues", "Used masks & gloves", "Broken glassware/sharps"],
+            "forbidden": ["General cardboard", "Food waste"],
+            "locations": ["Institute Hospital rear bay", "Chemistry department dock"],
+        },
+    ]
 
 
 @app.get("/api/locations")
