@@ -1,77 +1,109 @@
 # EcoSathi
 
-## Local setup
+Vite + React frontend, FastAPI backend, Supabase Auth + Postgres.
 
-1. Create a Supabase project and copy its URL, anon key, and service-role key.
-2. In Supabase SQL Editor, run [`supabase/schema.sql`](./supabase/schema.sql).
-3. Copy [`.env.example`](./.env.example) to `.env.local` and fill in the values below.
-4. Install and start both applications:
+## 1. Supabase project + database
 
-```bash
+1. Create a project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor**, paste and run [`supabase/schema.sql`](./supabase/schema.sql).
+3. Open **Project Settings > API** and copy:
+   - **Project URL** → `VITE_SUPABASE_URL` and `SUPABASE_URL` (must start with `https://`, never a `postgresql://` string)
+   - **anon / publishable** key → `VITE_SUPABASE_ANON_KEY`
+   - **service_role / secret** key → `SUPABASE_SERVICE_ROLE_KEY`
+4. In **Authentication > URL Configuration**, add `http://localhost:5173` to Site URL / Redirect URLs.
+5. For local demos, disable **Confirm email** under Authentication > Providers > Email (optional).
+
+## 2. Environment files
+
+```powershell
+cd sociothon-26
+copy .env.example .env.local
+```
+
+Edit `.env.local` and fill the keys from step 1. Keep `VITE_API_URL=http://localhost:3001` and `CLIENT_ORIGIN=http://localhost:5173`.
+
+## 3. Install dependencies (Windows PowerShell)
+
+```powershell
+cd sociothon-26
 npm install
 python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+macOS / Linux:
+
+```bash
+cd sociothon-26
+npm install
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+Use `supabase>=2.18.0` so new `sb_secret_` / `sb_publishable_` API keys work.
+
+## 4. Create tables + seed
+
+```powershell
+npm run db:setup
+npm run db:seed
+```
+
+Or:
+
+```powershell
+python -m server.setup_db
+python -m server.seed
+```
+
+Default login: `demo@ecosathi.local` / `EcoSathiDemo123!` (administrator).
+
+`DATABASE_URL` is required for `db:setup`. Get it from Supabase → Project Settings → Database → URI. If the password contains `@`, encode it as `%40`.
+
+## 5. Run frontend + backend
+
+```powershell
 npm run dev:all
 ```
 
-Open `http://localhost:5173`. The FastAPI service runs at `http://localhost:3001` and exposes interactive docs at `http://localhost:3001/docs`.
+After changing `.env` / `.env.local`, stop the process (Ctrl+C) and start `npm run dev:all` again.
 
-### Connection strings and keys
+- App: http://localhost:5173
+- API: http://localhost:3001
+- Docs: http://localhost:3001/docs
 
-Do not commit real credentials. Supabase provides the following in **Project Settings > API**:
+Or separately:
 
-```env
-VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=<publishable-anon-key>
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<secret-service-role-key>
+```powershell
+npm run server
+npm run dev
 ```
 
-The Supabase database connection string is in **Project Settings > Database > Connection string**:
+## Auth roles
 
-```text
-postgresql://postgres.<project-ref>:[YOUR-PASSWORD]@aws-0-<region>.pooler.supabase.com:6543/postgres
-```
+| Role | Access |
+|------|--------|
+| `resident` | Own reports, locations |
+| `worker` / `administrator` | All reports, routes, analytics, duplicates |
 
-Use the pooler string only for server-side migrations or workers, never in browser code. ElevenLabs values are available in the ElevenLabs dashboard under **Developers > API keys** and **Voices**:
+New signups get a `resident` profile automatically. The seed user is an `administrator` so Route / Impact analytics work out of the box.
 
-```env
-ELEVENLABS_API_KEY=<secret-api-key>
-ELEVENLABS_VOICE_ID=<voice-id>
-```
-
-The browser calls the API through `VITE_API_URL`; the API calls ElevenLabs so its secret remains private. The `POST /api/voice/synthesize` endpoint returns MP3 audio.
-
-### Seed demo data
-
-After running the Supabase schema and installing the Python dependencies, seed a demo account and five reports:
-
-```bash
-python3 -m server.seed
-```
-
-The default test credentials are `demo@ecosathi.local` / `EcoSathiDemo123!`. Override them with `SEED_USER_EMAIL` and `SEED_USER_PASSWORD` in `.env.local`. The seed is safe to run repeatedly: report codes are upserted and the demo user is reused.
-
-### Auth configuration
-
-In Supabase **Authentication > URL Configuration**, add `http://localhost:5173` to the site URL / redirect allow list. Email confirmation can be disabled for local development or left enabled for production.
-
-Available API routes:
+## API routes
 
 - `GET /api/health`
-- `GET /api/reports`
-- `POST /api/reports`
-- `GET /api/reports/:code`
-- `PATCH /api/reports/:code` and `/api/reports/:code/status`
+- `GET /api/me`
+- `GET /api/reports` · `POST /api/reports` · `GET|PATCH /api/reports/:code`
 - `GET /api/locations`
-- `POST /api/webhooks/elevenlabs/create_waste_report`
-- `GET /api/webhooks/elevenlabs/get_report_status/:code`
-- `GET /api/duplicates`
-- `POST /api/duplicates/:link_id/review`
-- `GET /api/collection-plans`
-- `POST /api/collection-plans/generate`
-- `PATCH /api/collection-stops/:stop_id`
-- `GET /api/workflows`
+- `GET /api/collection-plans` · `POST /api/collection-plans/generate`
 - `GET /api/analytics/summary`
-- `POST /api/voice/synthesize`
+- `GET /api/duplicates` · `POST /api/duplicates/:link_id/review`
+- `GET /api/workflows`
+- `POST /api/voice/synthesize` (needs ElevenLabs keys)
+
+## Notes
+
+- Do not put the Postgres pooler URL in `SUPABASE_URL`. The Python Supabase client needs the HTTPS API URL.
+- `.env` / `.env.local` are gitignored — never commit secrets.
+- ElevenLabs is optional; voice synthesis returns 503 until those keys are set.

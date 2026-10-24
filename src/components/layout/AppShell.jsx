@@ -8,7 +8,7 @@ import { Topbar } from './Topbar';
 
 export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { toast, showReportModal, setShowReportModal, addReport, dismissToast } = useReports();
+  const { toast, locations, showReportModal, setShowReportModal, addReport, dismissToast } = useReports();
 
   return (
     <div className="app-shell">
@@ -19,7 +19,7 @@ export function AppShell() {
         <Outlet />
       </main>
       {showReportModal && (
-        <ReportModal onClose={() => setShowReportModal(false)} onSubmit={addReport} />
+        <ReportModal locations={locations} onClose={() => setShowReportModal(false)} onSubmit={addReport} />
       )}
       {toast && <Toast title={toast.title} detail={toast.detail} onClose={dismissToast} />}
     </div>

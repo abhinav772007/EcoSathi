@@ -1,20 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowUpRight, Mic, ShieldCheck, X } from 'lucide-react';
 import { CATEGORIES, PRIORITIES } from '@/data/reports';
-import { LOCATIONS } from '@/data/campus';
 
-export function ReportModal({ onClose, onSubmit }) {
-  const [location, setLocation] = useState(LOCATIONS[0]);
+export function ReportModal({ locations, onClose, onSubmit }) {
+  const [locationId, setLocationId] = useState(locations[0]?.id ?? '');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [severity, setSeverity] = useState('High');
   const [description, setDescription] = useState('');
 
+  useEffect(() => {
+    if (!locationId && locations[0]?.id != null) {
+      setLocationId(locations[0].id);
+    }
+  }, [locationId, locations]);
+
   function handleSubmit() {
+    const selectedLocation = locations.find((location) => String(location.id) === String(locationId));
+    if (!selectedLocation) return;
     onSubmit({
-      title: description || `${category} reported at ${location}`,
-      location,
+      title: description || `${category} reported at ${selectedLocation.name}`,
+      location: selectedLocation.name,
+      location_id: selectedLocation.id,
       category,
       priority: severity,
+      description: description || null,
     });
   }
 
@@ -49,9 +58,9 @@ export function ReportModal({ onClose, onSubmit }) {
 
         <label>
           LOCATION
-          <select value={location} onChange={(event) => setLocation(event.target.value)}>
-            {LOCATIONS.map((item) => (
-              <option key={item}>{item}</option>
+          <select value={locationId} onChange={(event) => setLocationId(event.target.value)} disabled={!locations.length}>
+            {locations.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
             ))}
           </select>
         </label>

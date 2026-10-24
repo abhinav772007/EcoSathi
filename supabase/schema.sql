@@ -107,15 +107,45 @@ alter table public.audit_events enable row level security;
 drop policy if exists "Users can read their own reports" on public.reports;
 drop policy if exists "Users can create their own reports" on public.reports;
 drop policy if exists "Users can update their own reports" on public.reports;
+drop policy if exists "Authenticated users can read reports" on public.reports;
+drop policy if exists "Authenticated users can create reports" on public.reports;
+drop policy if exists "Authenticated users can update reports" on public.reports;
+drop policy if exists "Authenticated users can read locations" on public.locations;
 create policy "Authenticated users can read reports" on public.reports for select to authenticated using (auth.uid() = user_id);
 create policy "Authenticated users can create reports" on public.reports for insert to authenticated with check (auth.uid() = user_id);
 create policy "Authenticated users can update reports" on public.reports for update to authenticated using (auth.uid() = user_id);
 create policy "Authenticated users can read locations" on public.locations for select to authenticated using (true);
+drop policy if exists "Users can read own profile" on public.profiles;
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can read own profile" on public.profiles for select to authenticated using (auth.uid() = id);
+create policy "Users can update own profile" on public.profiles for update to authenticated using (auth.uid() = id);
 
 create index if not exists reports_user_created_idx on public.reports(user_id, created_at desc);
 create index if not exists reports_status_idx on public.reports(status);
 create index if not exists audit_entity_idx on public.audit_events(entity_type, entity_id);
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, name, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1), 'EcoSathi user'),
+    'resident'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
 
 insert into public.locations (name, latitude, longitude, location_type) values
   ('R. K. Hall · North gate', 29.8651, 77.8954, 'hostel'),

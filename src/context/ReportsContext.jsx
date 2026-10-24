@@ -7,6 +7,7 @@ const ReportsContext = createContext(null);
 export function ReportsProvider({ children }) {
   const { user } = useAuth();
   const [reports, setReports] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -14,8 +15,11 @@ export function ReportsProvider({ children }) {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    apiRequest('/api/reports')
-      .then(setReports)
+    Promise.all([apiRequest('/api/reports'), apiRequest('/api/locations')])
+      .then(([nextReports, nextLocations]) => {
+        setReports(nextReports);
+        setLocations(nextLocations);
+      })
       .catch((error) => {
         setReports([]);
         setToast({ title: 'Could not load reports', detail: error.message });
@@ -41,16 +45,22 @@ export function ReportsProvider({ children }) {
   }, []);
 
   const resolveReport = useCallback(async (id) => {
-    const resolved = await apiRequest(`/api/reports/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: 'Resolved' }),
-    });
-    setReports((current) => current.map((report) => (report.id === id ? resolved : report)));
+    try {
+      const resolved = await apiRequest(`/api/reports/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'Resolved' }),
+      });
+      setReports((current) => current.map((report) => (report.id === id ? resolved : report)));
+      setToast({ title: 'Report resolved', detail: `${id} marked as resolved` });
+      window.setTimeout(() => setToast(null), 2500);
+    } catch (error) {
+      setToast({ title: 'Could not resolve report', detail: error.message });
+    }
   }, []);
 
   const value = useMemo(
     () => ({
-      reports, loading,
+      reports, locations, loading,
       toast,
       showReportModal,
       setShowReportModal,
@@ -58,7 +68,7 @@ export function ReportsProvider({ children }) {
       resolveReport,
       dismissToast,
     }),
-    [addReport, dismissToast, reports, resolveReport, showReportModal, toast, loading],
+    [addReport, dismissToast, locations, reports, resolveReport, showReportModal, toast, loading],
   );
 
   return <ReportsContext.Provider value={value}>{children}</ReportsContext.Provider>;

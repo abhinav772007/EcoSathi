@@ -8,16 +8,29 @@ function MapMarker({ x, y, n, urgent }) {
   );
 }
 
-export function CampusMap() {
+export function CampusMap({ plan }) {
+  const stopCount = plan?.collection_stops?.length || 0;
+  const markers = stopCount
+    ? MAP_MARKERS.slice(0, Math.min(stopCount, MAP_MARKERS.length)).map((marker, index) => ({
+      ...marker,
+      n: String(index + 1),
+      urgent: index === 0,
+    }))
+    : MAP_MARKERS;
+
   return (
     <section className="card map-card">
       <div className="map-top">
         <div>
           <h2>North campus · Live plan</h2>
-          <p>Nearest-neighbour optimization · Updated 8 min ago</p>
+          <p>
+            {plan
+              ? `Prioritized route · ${stopCount} stops`
+              : 'Generate a route to activate the live plan'}
+          </p>
         </div>
-        <span className="status-pill ready">
-          <i /> Route active
+        <span className={`status-pill ${plan ? 'ready' : 'needs-review'}`}>
+          <i /> {plan ? 'Route active' : 'Waiting'}
         </span>
       </div>
       <div className="campus-map">
@@ -26,7 +39,7 @@ export function CampusMap() {
         <div className="map-road r2" />
         <div className="map-road r3" />
         <div className="route-line" />
-        {MAP_MARKERS.map((marker) => (
+        {markers.map((marker) => (
           <MapMarker key={marker.n} {...marker} />
         ))}
         <div className="map-label label-a">HOSTEL ZONE</div>
@@ -43,7 +56,7 @@ export function CampusMap() {
           <i className="legend-dot gray-dot" /> Upcoming
         </span>
         <b>
-          4.8 km <small>total distance</small>
+          {plan ? `${plan.total_distance} km` : '—'} <small>total distance</small>
         </b>
       </div>
     </section>

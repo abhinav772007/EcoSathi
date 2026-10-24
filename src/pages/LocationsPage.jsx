@@ -1,9 +1,39 @@
 import { MapPin } from 'lucide-react';
-import { CAMPUS_LOCATIONS } from '@/data/campus';
 import { PageHeading } from '@/components/ui/PageHeading';
+import { useReports } from '@/context/ReportsContext';
 import { statusClassName } from '@/data/reports';
 
+function zoneLabel(locationType) {
+  if (locationType === 'hostel') return 'Hostel zone';
+  if (locationType === 'academic') return 'Academic';
+  return 'Campus';
+}
+
+function locationStatus(openReports) {
+  if (openReports >= 2) return 'Needs attention';
+  if (openReports === 1) return 'Needs review';
+  return 'Clear';
+}
+
 export function LocationsPage() {
+  const { locations, reports, loading } = useReports();
+
+  const rows = locations.map((location) => {
+    const openReports = reports.filter(
+      (report) =>
+        report.status !== 'Resolved' &&
+        (report.location_id === location.id || report.location === location.name),
+    ).length;
+    return {
+      id: location.id,
+      name: location.name,
+      zone: zoneLabel(location.location_type),
+      bins: '—',
+      openReports,
+      status: locationStatus(openReports),
+    };
+  });
+
   return (
     <div className="page">
       <PageHeading
@@ -24,8 +54,18 @@ export function LocationsPage() {
               </tr>
             </thead>
             <tbody>
-              {CAMPUS_LOCATIONS.map((location) => (
-                <tr key={location.name}>
+              {loading && (
+                <tr>
+                  <td colSpan={5}>Loading locations…</td>
+                </tr>
+              )}
+              {!loading && !rows.length && (
+                <tr>
+                  <td colSpan={5}>No locations found. Run the Supabase schema seed insert first.</td>
+                </tr>
+              )}
+              {rows.map((location) => (
+                <tr key={location.id}>
                   <td>
                     <span className="location-cell">
                       <MapPin size={14} />

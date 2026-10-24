@@ -1,9 +1,12 @@
 export const REPORT_STATUSES = [
   'All reports',
+  'Submitted',
   'Needs review',
   'Verified',
   'Assigned',
+  'In Progress',
   'Resolved',
+  'Rejected',
 ];
 
 export const CATEGORIES = [

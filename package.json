@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "uvicorn server.main:app --reload --port 3001",
+    "server": ".venv\\Scripts\\uvicorn server.main:app --reload --port 3001",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
+    "db:setup": ".venv\\Scripts\\python -m server.setup_db",
+    "db:seed": ".venv\\Scripts\\python -m server.seed",
     "build": "vite build",
     "preview": "vite preview"
   },

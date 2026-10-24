@@ -1,14 +1,25 @@
-import { NavLink } from 'react-router-dom';
-import { ArrowUpRight, ChevronDown, CircleHelp, Leaf, MoreHorizontal } from 'lucide-react';
-import { CURRENT_USER, WORKSPACE } from '@/data/campus';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { ArrowUpRight, ChevronDown, CircleHelp, Leaf, LogOut, MoreHorizontal } from 'lucide-react';
+import { WORKSPACE } from '@/data/campus';
 import { NAV_SECTIONS } from '@/data/navigation';
 import { openReportCount } from '@/data/reports';
+import { useAuth } from '@/context/AuthContext';
 import { useReports } from '@/context/ReportsContext';
 import { Icon } from '@/components/ui/Icon';
 
 export function Sidebar({ open, onNavigate }) {
+  const { displayName, role, initials, signOut } = useAuth();
   const { reports } = useReports();
+  const navigate = useNavigate();
   const badges = { openReports: openReportCount(reports) };
+  const roleLabel = role === 'administrator' ? 'Administrator' : role === 'worker' ? 'Collection worker' : 'Resident';
+
+  async function handleSignOut() {
+    if (window.confirm('Sign out of EcoSathi?')) {
+      await signOut();
+      navigate('/login', { replace: true });
+    }
+  }
 
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
@@ -66,14 +77,25 @@ export function Sidebar({ open, onNavigate }) {
           <ArrowUpRight size={15} />
         </div>
         <div className="profile">
-          <div className="profile-avatar">{CURRENT_USER.initials}</div>
+          <div className="profile-avatar">{initials}</div>
           <div>
-            <b>{CURRENT_USER.name}</b>
-            <small>{CURRENT_USER.role}</small>
+            <b>{displayName}</b>
+            <small>{roleLabel}</small>
           </div>
-          <MoreHorizontal size={17} />
+          <button
+            type="button"
+            className="icon-button"
+            onClick={handleSignOut}
+            title="Sign out"
+            aria-label="Sign out"
+            style={{ marginLeft: 'auto' }}
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
     </aside>
   );
 }
+
+

@@ -16,21 +16,21 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ReportsProvider>
-        <Routes>
-          <Route path="/login" element={<AuthPage />} />
-          <Route path="/signup" element={<AuthPage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route element={<AppShell />}>
-            <Route path="/" element={<OverviewPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/route" element={<RoutePage />} />
-            <Route path="/impact" element={<ImpactPage />} />
-            <Route path="/team" element={<TeamPage />} />
-            <Route path="/locations" element={<LocationsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+          <Routes>
+            <Route path="/login" element={<AuthPage />} />
+            <Route path="/signup" element={<AuthPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppShell />}>
+                <Route path="/" element={<OverviewPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/route" element={<RoutePage />} />
+                <Route path="/impact" element={<ImpactPage />} />
+                <Route path="/team" element={<TeamPage />} />
+                <Route path="/locations" element={<LocationsPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
             </Route>
-          </Route>
-        </Routes>
+          </Routes>
         </ReportsProvider>
       </AuthProvider>
     </BrowserRouter>

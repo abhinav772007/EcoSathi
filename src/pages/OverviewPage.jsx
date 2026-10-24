@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, Bell, Check, Clock3, Leaf, Plus, Sparkles } from 'lucide-react';
-import { CURRENT_USER } from '@/data/campus';
 import { openReportCount, REPORT_STATUSES } from '@/data/reports';
+import { useAuth } from '@/context/AuthContext';
 import { useReports } from '@/context/ReportsContext';
 import { ActivityChart } from '@/components/overview/ActivityChart';
 import { RoutePreview } from '@/components/overview/RoutePreview';
@@ -12,6 +12,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { useMemo, useState } from 'react';
 
 export function OverviewPage() {
+  const { displayName } = useAuth();
   const { reports, resolveReport, setShowReportModal } = useReports();
   const [filter, setFilter] = useState('All reports');
 
@@ -19,12 +20,14 @@ export function OverviewPage() {
     () => (filter === 'All reports' ? reports : reports.filter((report) => report.status === filter)),
     [filter, reports],
   );
+  const resolvedCount = reports.filter((report) => report.status === 'Resolved').length;
+  const firstName = displayName.split(' ')[0] || 'there';
 
   return (
     <div className="page">
       <PageHeading
-        eyebrow="Monday, 24 October 2026"
-        title={`Good morning, ${CURRENT_USER.name.split(' ')[0]}`}
+        eyebrow="Campus operations"
+        title={`Good morning, ${firstName}`}
         description="Here’s what’s happening across your campus today."
         action={
           <button type="button" className="primary-btn" onClick={() => setShowReportModal(true)}>
@@ -38,8 +41,8 @@ export function OverviewPage() {
           <Sparkles size={19} />
         </div>
         <div>
-          <b>Collection efficiency is up 18% this week</b>
-          <span>Resolution time is trending down after the new route plan. Keep it up.</span>
+          <b>{openReportCount(reports)} open reports in the queue</b>
+          <span>Review, verify, and generate a collection route from the Route page.</span>
         </div>
         <Link to="/impact">
           View insights <ArrowUpRight size={15} />
@@ -47,10 +50,10 @@ export function OverviewPage() {
       </div>
 
       <div className="stat-grid">
-        <StatCard label="Open reports" value={openReportCount(reports)} change="+12%" note="vs last week" icon={<Bell size={17} />} tone="orange" />
-        <StatCard label="Resolved this week" value="86" change="+24%" note="vs last week" icon={<Check size={17} />} tone="green" />
-        <StatCard label="Avg. resolution time" value="2.4h" change="-18%" note="vs last week" icon={<Clock3 size={17} />} tone="blue" />
-        <StatCard label="Waste recovered" value="142 kg" change="+31%" note="this month" icon={<Leaf size={17} />} tone="purple" />
+        <StatCard label="Open reports" value={openReportCount(reports)} change="" note="active" icon={<Bell size={17} />} tone="orange" />
+        <StatCard label="Resolved" value={resolvedCount} change="" note="all loaded" icon={<Check size={17} />} tone="green" />
+        <StatCard label="Total reports" value={reports.length} change="" note="your view" icon={<Clock3 size={17} />} tone="blue" />
+        <StatCard label="Locations in use" value={new Set(reports.map((report) => report.location)).size} change="" note="from reports" icon={<Leaf size={17} />} tone="purple" />
       </div>
 
       <div className="content-grid">

@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
-load_dotenv(".env.local")
 load_dotenv()
+load_dotenv(".env.local", override=True)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")

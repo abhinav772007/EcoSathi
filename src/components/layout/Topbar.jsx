@@ -1,13 +1,20 @@
-import { useLocation } from 'react-router-dom';
-import { Bell, Leaf, Menu, Search } from 'lucide-react';
-import { CURRENT_USER } from '@/data/campus';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell, Leaf, LogOut, Menu, Search } from 'lucide-react';
 import { pageLabelFromPath } from '@/data/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 export function Topbar({ onMenu }) {
-  const { signOut } = useAuth();
+  const { signOut, initials, displayName } = useAuth();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const pageLabel = pageLabelFromPath(pathname);
+
+  async function handleSignOut() {
+    if (window.confirm(`Sign out of EcoSathi?`)) {
+      await signOut();
+      navigate('/login', { replace: true });
+    }
+  }
 
   return (
     <header className="topbar">
@@ -33,7 +40,12 @@ export function Topbar({ onMenu }) {
           <Bell size={18} />
           <i />
         </button>
-        <button type="button" className="top-avatar" onClick={signOut} title="Sign out">{CURRENT_USER.initials}</button>
+        <div className="top-user" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="top-avatar" title={displayName} style={{ cursor: 'default' }}>{initials}</span>
+          <button type="button" className="icon-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out">
+            <LogOut size={16} />
+          </button>
+        </div>
       </div>
     </header>
   );

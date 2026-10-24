@@ -1,7 +1,7 @@
 import math
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import httpx
@@ -12,17 +12,28 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
 
-load_dotenv(".env.local")
 load_dotenv()
+load_dotenv(".env.local", override=True)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-supabase: Client | None = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY else None
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY", "")
+_supabase_ready = bool(
+    SUPABASE_URL
+    and SUPABASE_SERVICE_ROLE_KEY
+    and SUPABASE_URL.startswith("https://")
+    and "REPLACE_WITH_" not in SUPABASE_SERVICE_ROLE_KEY
+    and not SUPABASE_SERVICE_ROLE_KEY.startswith("your-")
+)
+supabase: Client | None = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if _supabase_ready else None
 
 app = FastAPI(title="EcoSathi API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CLIENT_ORIGIN", "http://localhost:5173")],
-    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+    # Allow any localhost / 127.0.0.1 port so Vite's port-hopping (5173→5175) never breaks auth
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 STATUSES = ("Submitted", "Needs review", "Verified", "Assigned", "In Progress", "Resolved", "Rejected")
@@ -61,14 +72,38 @@ class StopUpdate(BaseModel):
     worker_status: str = Field(pattern="^(in_progress|completed|skipped)$")
 
 
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=6, max_length=128)
+    name: str = Field(min_length=1, max_length=120)
+
+
 def configured() -> Client:
     if not supabase:
-        raise HTTPException(503, "Backend is not configured. Add Supabase server credentials.")
+        raise HTTPException(
+            503,
+            "Backend is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY "
+            "(use the secret/service_role key, then restart the server).",
+        )
     return supabase
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def ensure_profile(client: Client, user) -> dict:
+    user_id = str(user.id)
+    fallback_name = (user.user_metadata or {}).get("full_name") or (user.email or "EcoSathi user").split("@")[0]
+    existing = client.table("profiles").select("name,role").eq("id", user_id).limit(1).execute()
+    if existing.data:
+        return existing.data[0]
+    client.table("profiles").upsert({
+        "id": user_id,
+        "name": fallback_name,
+        "role": "resident",
+    }).execute()
+    return {"name": fallback_name, "role": "resident"}
 
 
 async def current_user(authorization: Annotated[str | None, Header()] = None) -> dict:
@@ -81,8 +116,7 @@ async def current_user(authorization: Annotated[str | None, Header()] = None) ->
         raise HTTPException(401, "Invalid or expired session.") from error
     if not result.user:
         raise HTTPException(401, "Invalid or expired session.")
-    profile = client.table("profiles").select("name,role").eq("id", str(result.user.id)).maybe_single().execute()
-    data = profile.data or {"name": result.user.user_metadata.get("full_name", "EcoSathi user"), "role": "resident"}
+    data = ensure_profile(client, result.user)
     return {"id": str(result.user.id), **data}
 
 
@@ -106,7 +140,84 @@ def write_audit(client: Client, user_id: str, entity_type: str, entity_id: str, 
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "service": "ecosathi-api", "supabaseConfigured": bool(supabase), "version": app.version}
+    db_ok = False
+    location_count = 0
+    if supabase:
+        try:
+            result = supabase.table("locations").select("id").execute()
+            db_ok = True
+            location_count = len(result.data or [])
+        except Exception:
+            db_ok = False
+    return {
+        "ok": True,
+        "service": "ecosathi-api",
+        "supabaseConfigured": bool(supabase),
+        "databaseConnected": db_ok,
+        "locationCount": location_count,
+        "version": app.version,
+    }
+
+
+@app.post("/api/auth/register", status_code=201)
+def register(payload: RegisterRequest) -> dict:
+    """Create a confirmed account so the user can sign in immediately (local/dev friendly)."""
+    client = configured()
+    email = payload.email.strip().lower()
+    name = payload.name.strip()
+    try:
+        created = client.auth.admin.create_user(
+            {
+                "email": email,
+                "password": payload.password,
+                "email_confirm": True,
+                "user_metadata": {"full_name": name},
+            }
+        )
+    except Exception as error:
+        message = str(error)
+        if "already" in message.lower() or "registered" in message.lower() or "exists" in message.lower():
+            raise HTTPException(409, "An account with this email already exists. Please sign in.") from error
+        raise HTTPException(400, message or "Could not create account.") from error
+
+    user = created.user
+    if not user:
+        raise HTTPException(500, "Account was not created.")
+    client.table("profiles").upsert({
+        "id": str(user.id),
+        "name": name,
+        "role": "resident",
+    }).execute()
+    return {
+        "ok": True,
+        "message": "Account created successfully. You can sign in now.",
+        "email": email,
+        "name": name,
+    }
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=128)
+
+
+@app.post("/api/auth/login")
+async def login(payload: LoginRequest) -> dict:
+    """Sign in using the Supabase anon key via REST API and return the session."""
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise HTTPException(503, "Auth service not configured.")
+    url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/token?grant_type=password"
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            url,
+            headers={"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"},
+            json={"email": payload.email.strip().lower(), "password": payload.password},
+        )
+    body = resp.json()
+    if resp.status_code >= 400:
+        detail = body.get("error_description") or body.get("msg") or body.get("error") or "Invalid credentials."
+        raise HTTPException(resp.status_code if resp.status_code < 500 else 400, detail)
+    return body
 
 
 @app.get("/api/me")
@@ -134,16 +245,18 @@ def create_report(payload: ReportCreate, user: dict = Depends(current_user)) -> 
     if not payload.confirmed:
         raise HTTPException(400, "Report confirmation is required before submission.")
     if payload.idempotency_key:
-        previous = client.table("reports").select("*").eq("idempotency_key", payload.idempotency_key).maybe_single().execute()
+        previous = client.table("reports").select("*").eq("idempotency_key", payload.idempotency_key).limit(1).execute()
         if previous.data:
-            return to_client_report(previous.data)
+            return to_client_report(previous.data[0])
     record = {
         "code": f"ECO-{uuid.uuid4().hex[:8].upper()}", "user_id": user["id"],
         **payload.model_dump(exclude_none=True), "status": "Submitted",
     }
     result = client.table("reports").insert(record).select("*").single().execute()
     write_audit(client, user["id"], "report", str(result.data["id"]), "created", {"source": payload.source})
-    return to_client_report(result.data)
+    process_report_workflow(client, result.data, user["id"])
+    refreshed = report_query(client).eq("id", result.data["id"]).single().execute()
+    return to_client_report(refreshed.data or result.data)
 
 
 @app.post("/api/webhooks/elevenlabs/create_waste_report", status_code=201)
@@ -157,10 +270,10 @@ def get_report(code: str, user: dict = Depends(current_user)) -> dict:
     query = report_query(configured()).eq("code", code)
     if user["role"] == "resident":
         query = query.eq("user_id", user["id"])
-    result = query.maybe_single().execute()
+    result = query.limit(1).execute()
     if not result.data:
         raise HTTPException(404, "Report not found.")
-    return to_client_report(result.data)
+    return to_client_report(result.data[0])
 
 
 @app.get("/api/webhooks/elevenlabs/get_report_status/{code}")
@@ -177,14 +290,15 @@ def update_report_status(code: str, payload: StatusUpdate, user: dict = Depends(
     result = report_query(client).eq("code", code)
     if user["role"] == "resident":
         result = result.eq("user_id", user["id"])
-    current = result.maybe_single().execute()
+    current = result.limit(1).execute()
     if not current.data:
         raise HTTPException(404, "Report not found.")
+    report = current.data[0]
     changes = {"status": payload.status, "updated_at": now()}
     if payload.status == "Resolved":
         changes["resolved_at"] = now()
-    updated = client.table("reports").update(changes).eq("id", current.data["id"]).select("*").single().execute()
-    write_audit(client, user["id"], "report", str(current.data["id"]), "status_changed", {"status": payload.status})
+    updated = client.table("reports").update(changes).eq("id", report["id"]).select("*").single().execute()
+    write_audit(client, user["id"], "report", str(report["id"]), "status_changed", {"status": payload.status})
     return to_client_report(updated.data)
 
 
@@ -250,10 +364,10 @@ def list_plans(user: dict = Depends(current_user)) -> list[dict]:
 @app.get("/api/collection-plans/{plan_id}")
 def get_plan(plan_id: str, user: dict = Depends(current_user)) -> dict:
     require_role(user, "administrator", "worker")
-    result = configured().table("collection_plans").select("*,collection_stops(*)").eq("id", plan_id).maybe_single().execute()
+    result = configured().table("collection_plans").select("*,collection_stops(*)").eq("id", plan_id).limit(1).execute()
     if not result.data:
         raise HTTPException(404, "Collection plan not found.")
-    return result.data
+    return result.data[0]
 
 
 @app.patch("/api/collection-stops/{stop_id}")
@@ -290,6 +404,44 @@ def analytics_summary(user: dict = Depends(current_user)) -> dict:
         "median_resolution_hours": round(sorted(times)[len(times) // 2], 2) if times else None,
         "demo_data": True,
     }
+
+
+def process_report_workflow(client: Client, report: dict, actor_id: str) -> None:
+    run = client.table("workflow_runs").insert({
+        "kind": "report_processing", "report_id": report["id"], "status": "running",
+        "algorithm_version": "triage-duplicate-v1", "started_at": now(),
+    }).select("*").single().execute().data
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        duplicate_query = client.table("reports").select("id,code,title").eq(
+            "category", report["category"]
+        ).neq("id", report["id"]).neq("status", "Resolved").gte(
+            "created_at", cutoff.isoformat()
+        )
+        if report.get("location_id"):
+            duplicate_query = duplicate_query.eq("location_id", report["location_id"])
+        else:
+            duplicate_query = duplicate_query.eq("location", report["location"])
+        candidates = duplicate_query.execute().data
+        if candidates:
+            client.table("report_links").upsert({
+                "report_id": report["id"], "canonical_report_id": candidates[0]["id"],
+                "match_reason": "same location and category within review window",
+                "confidence": 0.75, "reviewed": False,
+            }, on_conflict="report_id,canonical_report_id").execute()
+            next_status = "Needs review"
+        else:
+            next_status = "Verified"
+        client.table("reports").update({"status": next_status, "updated_at": now()}).eq(
+            "id", report["id"]
+        ).execute()
+        client.table("workflow_runs").update({
+            "status": "succeeded", "completed_at": now()
+        }).eq("id", run["id"]).execute()
+    except Exception as error:
+        client.table("workflow_runs").update({
+            "status": "failed", "error": str(error), "completed_at": now()
+        }).eq("id", run["id"]).execute()
 
 
 @app.post("/api/voice/synthesize")
